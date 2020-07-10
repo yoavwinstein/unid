@@ -40,16 +40,11 @@ int main() {
 
 	unid::DynamicRoute dispatcher;
 	
-	// unid::ReductionStore<int, SomeStore, MyStruct, AnotherStruct> f;
 	unid::EventConsumer<MyStore, Action1, Action2> g;
 	unid::EventConsumer<MyStaticStore, Action1> b;
 
 	dispatcher.registerConsumer(g);
 	dispatcher.registerConsumer(b);
-	// dispatcher(Action1{});
-	// dispatcher(Action1{});
-	// dispatcher(Action1{});
-	// dispatcher(Action2{});
 
 	// std::cout << f.getState();
 	MyStaticStore static1{};
@@ -61,7 +56,6 @@ int main() {
 	std::cout << std::endl;
 	staticDisp(Action1{});
 	std::cout << std::endl;
-	staticDisp(NonDispatchedAction{});
 
 	return 0;
 }

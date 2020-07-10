@@ -12,6 +12,7 @@ class IEventConsumer {
 public:
 	virtual void operator()(uint64_t id, const void* action) = 0;
 	virtual std::vector<uint64_t> getActionIDs() const = 0;
+	virtual ~IEventConsumer() = default;
 };
 
 template <typename Impl, typename ...Args>
@@ -50,25 +51,44 @@ private:
 	}
 };
 
-class DynamicRoute {
+class DynamicRoute final {
 public:
-
 	template <typename T>
-	void operator()(const T& action) {
+	void operator()(const T& event) {
 		uint64_t id = details::type_id<T>();
-		for (auto& eventConsumer : m_eventConsumers[id]) {
-			eventConsumer(id, reinterpret_cast<const void*>(&action));
+		auto eventConsumersMapIter = m_eventConsumers.find(id);
+		if (eventConsumersMapIter == m_eventConsumers.end()) {
+			throw std::exception("No consumers found for event");
+		}
+		for (auto& eventConsumer : eventConsumersMapIter) {
+			eventConsumer(id, reinterpret_cast<const void*>(&event));
 		}
 	}
 
-	void registerConsumer(IEventConsumer& store) {
-		for (uint64_t id : store.getActionIDs()) {
-			m_eventConsumers[id].push_back(store);
+	void registerConsumer(IEventConsumer& consumer) {
+		for (uint64_t id : consumer.getActionIDs()) {
+			m_eventConsumers[id].push_back(consumer);
 		}
 	};
 
+	void unregisterConsumer(IEventConsumer& consumer) {
+		for (uint64_t id : consumer.getActionIDs()) {
+			auto& eventConsumersVec = m_eventConsumers[id];
+			eventConsumersVec.erase(std::remove_if(
+				eventConsumersVec.begin(),
+				eventConsumersVec.end(),
+				[&consumer](const auto& a) {
+				return &a.get() == &consumer;
+			}), eventConsumersVec.end());
+		}
+	}
+
 private:
-	std::unordered_map<uint64_t, std::vector<std::reference_wrapper<IEventConsumer>>> m_eventConsumers;
+
+	using EventConsumerReferenceType = std::reference_wrapper<IEventConsumer>;
+	using EventConsumersVectorType = std::vector<EventConsumerReferenceType>;
+
+	std::unordered_map<uint64_t, EventConsumersVectorType> m_eventConsumers;
 };
 
 template <typename... EventConsumerTypes>
