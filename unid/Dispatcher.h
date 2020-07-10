@@ -3,22 +3,21 @@
 #include "TypeIdentifier.h"
 #include <vector>
 #include <unordered_map>
+#include <variant>
+
 
 namespace unid {
 
-class IStore {
+class IEventConsumer {
 public:
-	virtual void dispatch(uint64_t id, const void* action) = 0;
+	virtual void operator()(uint64_t id, const void* action) = 0;
 	virtual std::vector<uint64_t> getActionIDs() const = 0;
 };
 
 template <typename Impl, typename ...Args>
-class Store : public IStore, public Impl {
+class EventConsumer : public IEventConsumer, public Impl {
 public:
-
-	using Impl::onAction;
-
-	virtual void dispatch(uint64_t id, const void* action) override {
+	virtual void operator()(uint64_t id, const void* action) override {
 		dispatchImpl<Args...>(id, action);
 	}
 
@@ -43,7 +42,7 @@ private:
 
 		constexpr auto clsId = details::type_id<T>();
 		if (clsId == id) {
-			this->onAction(reinterpret_cast<const T&>(action));
+			Impl::operator()(reinterpret_cast<const T&>(action));
 		}
 		if constexpr (sizeof...(Args) > 0) {
 			dispatchImpl<Args...>(id, action);
@@ -51,46 +50,49 @@ private:
 	}
 };
 
-template <typename T, typename Impl>
-class ReductionStoreImpl : public Impl {
-public:
-	using Impl::reduce;
-
-	template <typename U>
-	void onAction(const U& action) {
-		auto newState = reduce(action, m_state);
-		if (newState.has_value()) {
-			m_state = *newState;
-		}
-	}
-
-	const T& getState() const {
-		return m_state;
-	}
-
-private:
-	T m_state{};
-};
-
-template <typename State, typename Impl, typename ...Args>
-using ReductionStore = Store<ReductionStoreImpl<State, Impl>, Args...>;
-
-class Dispatcher {
+class DynamicRoute {
 public:
 
 	template <typename T>
-	void dispatch(const T& action) {
+	void operator()(const T& action) {
 		uint64_t id = details::type_id<T>();
-		m_map[id]->dispatch(id, reinterpret_cast<const void*>(&action));
+		for (auto& eventConsumer : m_eventConsumers[id]) {
+			eventConsumer(id, reinterpret_cast<const void*>(&action));
+		}
 	}
 
-	void registerStore(IStore* store) {
-		for (uint64_t id : store->getActionIDs()) {
-			m_map[id] = store;
+	void registerConsumer(IEventConsumer& store) {
+		for (uint64_t id : store.getActionIDs()) {
+			m_eventConsumers[id].push_back(store);
 		}
 	};
 
-	std::unordered_map<uint64_t, IStore*> m_map;
+private:
+	std::unordered_map<uint64_t, std::vector<std::reference_wrapper<IEventConsumer>>> m_eventConsumers;
+};
+
+template <typename... EventConsumerTypes>
+class StaticRoute final {
+public:
+	StaticRoute(EventConsumerTypes&... stores) : m_eventConsumers(stores...) {}
+
+	template <typename T, size_t I = 0, bool anyConsumer = false>
+	void operator()(const T& action) {
+		auto& eventConsumer = std::get<I>(m_eventConsumers);
+		constexpr bool anyConsumerOnThisLevel = std::is_invocable_v<std::decay_t<decltype(eventConsumer)>, const T&>;
+		if constexpr (anyConsumerOnThisLevel) {
+			eventConsumer(action);
+		}
+
+		if constexpr (I + 1 < sizeof...(EventConsumerTypes)) {
+			operator()<T, I + 1, anyConsumer || anyConsumerOnThisLevel>(action);
+		} else {
+			static_assert(anyConsumer || anyConsumerOnThisLevel, "No consumers found for type");
+		}
+	}
+
+private:
+	std::tuple<EventConsumerTypes&...> m_eventConsumers;
 };
 
 }
