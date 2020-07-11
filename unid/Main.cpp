@@ -2,12 +2,13 @@
 #include <optional>
 #include <windows.h>
 #include "Dispatcher.h"
+#include "MainRoute.h"
 
 struct Action1 {};
 struct Action2 {};
 struct NonDispatchedAction {};
 
-class MyStore {
+class EventConsumer1 {
 public:
 	void operator()(const Action1& a) {
 		std::cout << "Action1 dispatched from MyStore!" << std::endl;
@@ -18,44 +19,37 @@ public:
 	}
 };
 
-class MyStaticStore {
+class EventConsumer2 {
 public:
 	void operator() (const Action1& a) {
 		std::cout << "Action1 Dispatched from MyStaticStore!" << std::endl;
 	}
 };
 
-class MyStaticStore2 {
+class EventConsumer3 {
 public:
-	MyStaticStore2() = default;
-	MyStaticStore2(const MyStaticStore2&) = delete;
-	const MyStaticStore2& operator=(const MyStaticStore2&) = delete;
+	EventConsumer3() = default;
+	EventConsumer3(const EventConsumer3&) = delete;
+	const EventConsumer3& operator=(const EventConsumer3&) = delete;
 
 	void operator() (const double& b) {
 		std::cout << "Double Dispatched from MyStaticStore2!" << std::endl;
 	}
 };
 
+static unid::RegisterConsumer<unid::EventConsumer<EventConsumer1, Action1, Action2>> x;
+static unid::RegisterConsumer<unid::EventConsumer<EventConsumer2, Action1>> y;
+
 int main() {
 
 	unid::DynamicRoute dispatcher;
-	
-	unid::EventConsumer<MyStore, Action1, Action2> g;
-	unid::EventConsumer<MyStaticStore, Action1> b;
 
-	dispatcher.registerConsumer(g);
-	dispatcher.registerConsumer(b);
+	auto consumers = unid::ConsumerRegistry::constructAll();
+	for (auto& consumer : consumers) {
+		dispatcher.registerConsumer(*consumer);
+	}
 
-	// std::cout << f.getState();
-	MyStaticStore static1{};
-	MyStaticStore2 static2{};
-	unid::StaticRoute staticDisp(static1, static2);
-	staticDisp(Action1{});
-	std::cout << std::endl;
-	staticDisp(Action1{});
-	std::cout << std::endl;
-	staticDisp(Action1{});
-	std::cout << std::endl;
+	dispatcher(Action1{});
 
 	return 0;
 }

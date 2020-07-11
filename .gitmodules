@@ -1,0 +1,3 @@
+[submodule "self-registering-components"]
+	path = self-registering-components
+	url = https://github.com/yoavwinstein/self-registering-components.git

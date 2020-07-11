@@ -60,7 +60,7 @@ public:
 		if (eventConsumersMapIter == m_eventConsumers.end()) {
 			throw std::exception("No consumers found for event");
 		}
-		for (auto& eventConsumer : eventConsumersMapIter) {
+		for (auto& eventConsumer : eventConsumersMapIter->second) {
 			eventConsumer(id, reinterpret_cast<const void*>(&event));
 		}
 	}
@@ -94,7 +94,7 @@ private:
 template <typename... EventConsumerTypes>
 class StaticRoute final {
 public:
-	StaticRoute(EventConsumerTypes&... stores) : m_eventConsumers(stores...) {}
+	StaticRoute(EventConsumerTypes&... consumers) : m_eventConsumers(consumers...) {}
 
 	template <typename T, size_t I = 0, bool anyConsumer = false>
 	void operator()(const T& action) {
